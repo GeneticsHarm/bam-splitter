@@ -17,11 +17,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- *
  * BamFileSplitter splits a BAM files generated in cell-ranger pipeline from 10xGenomics into a file per singe cell.
- *
- * Multimappers are removed by reading the GX flag for multiple genes.
- *
+ * <p>
+ * Multimappers are removed by discarding records with a NH flag > 1.
  *
  * @author Harm Brugge
  * @version 0.0.1
@@ -37,8 +35,9 @@ public class BamFileSplitter {
 
     private int fileCount;
     private int recordCount;
-    private int withoutBarcodeCount;
-    private int barcodeNotPresentCount;
+    private int absentBarcodeCount;
+    private int invalidBarcodeCount;
+    private int multiMappedCount;
 
     private SamReader samReader;
     private SAMFileWriterFactory writerFactory = new SAMFileWriterFactory();
@@ -72,7 +71,7 @@ public class BamFileSplitter {
     public void split() throws IOException {
         this.populateKeys();
 
-        for (SAMRecord samRecord :samReader) {
+        for (SAMRecord samRecord : samReader) {
             recordCount++;
 
             if (isMultimapped(samRecord)) continue;
@@ -88,15 +87,15 @@ public class BamFileSplitter {
                     addRecordToBam(barcode, samRecord);
                 } else {
 //                            logger.warn("Barcode not present in barcode file, for record: " + samRecord.toString());
-                    barcodeNotPresentCount++;
+                    invalidBarcodeCount++;
                 }
             } else {
 //                        logger.warn("No barcode found for SAMRecord: " + samRecord.toString());
-                withoutBarcodeCount++;
+                absentBarcodeCount++;
             }
         }
 
-        System.out.println(this.toString());
+        this.printSummary();
 
         closeOutputWriters();
         samReader.close();
@@ -115,13 +114,22 @@ public class BamFileSplitter {
     }
 
     private boolean isMultimapped(SAMRecord samRecord) {
-        Object gxTag = samRecord.getAttribute("GX");
-        if (gxTag != null) {
-            int gxCount = String.valueOf(gxTag).split(";").length;
-            if (gxCount > 1) {
+        Object nhTag = samRecord.getAttribute("NH");
+
+        if (nhTag != null) {
+            try {
+                int hitsCount = (int) nhTag;
+
+                if (hitsCount > 1) {
+                    multiMappedCount++;
+                    return true;
+                }
+            } catch (ClassCastException e) {
+                logger.warn("Skipped record: " + samRecord + " Invalid NH tag (not an integer)");
                 return true;
             }
         }
+
         return false;
     }
 
@@ -164,13 +172,22 @@ public class BamFileSplitter {
         }
     }
 
+    private void printSummary() {
+        System.out.println("BamFileSplitter: \n" +
+                "fileCount=" + fileCount +
+                ", recordCount=" + recordCount +
+                ", absentBarcodeCount=" + absentBarcodeCount +
+                ", invalidBarcodeCount=" + invalidBarcodeCount +
+                ", multimappers=" + multiMappedCount);
+    }
+
     @Override
     public String toString() {
         return "BamFileSplitter{" +
                 "fileCount=" + fileCount +
                 ", recordCount=" + recordCount +
-                ", withoutBarcodeCount=" + withoutBarcodeCount +
-                ", barcodeNotPresentCount=" + barcodeNotPresentCount +
+                ", absentBarcodeCount=" + absentBarcodeCount +
+                ", invalidBarcodeCount=" + invalidBarcodeCount +
                 '}';
     }
 }
