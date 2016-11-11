@@ -19,7 +19,10 @@ public class SampleSheetCreator {
 
     private static final String SAMPLE_SHEET_FILENAME = "samplesheet.csv";
 
+    private static final int GROUP_SIZE = 50;
+
     private int fileCount;
+    private int groupCount;
 
     private final Path pathToBarcodeFile;
 
@@ -27,7 +30,7 @@ public class SampleSheetCreator {
          this.pathToBarcodeFile = pathToBarcodeFile;
     }
 
-    public void createSamplesheet(Path outputDir) throws IOException {
+    public void create(Path outputDir) throws IOException {
 
         outputDir.toFile().mkdirs();
         File outputFile = new File(outputDir.toString(), SAMPLE_SHEET_FILENAME);
@@ -36,16 +39,24 @@ public class SampleSheetCreator {
         // project,cellId,bamFile
         FileWriter fileWriter = new FileWriter(outputFile.getAbsoluteFile());
         BufferedWriter bw = new BufferedWriter(fileWriter);
-        bw.write("project,cellId,bamFile\n");
+        bw.write("project,cellId,bamFile,cellGroup\n");
 
         try (BufferedReader br = new BufferedReader(new FileReader(pathToBarcodeFile.toFile()))) {
             String barcode = br.readLine();
 
             while (barcode != null) {
                 fileCount++;
-                String filePath = "${splitBamDir}/" + FILENAME_PREFIX + fileCount + "_" + barcode + EXTENSION;
-                bw.write(PROJECT_NAME + "," + FILENAME_PREFIX + fileCount + "_" + barcode + "," + filePath);
-                bw.write("\n");
+
+                if (fileCount % GROUP_SIZE == 0) {
+                    groupCount++;
+                }
+
+                String cellId = FILENAME_PREFIX + fileCount + "_" + barcode;
+                String filePath = groupCount + "/" + cellId + EXTENSION;
+                bw.write(PROJECT_NAME + ",");
+                bw.write(cellId + ",");
+                bw.write(filePath + ",");
+                bw.write(groupCount + "\n");
 
                 barcode = br.readLine();
             }

@@ -13,8 +13,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * BamFileSplitter splits a BAM files generated in cell-ranger pipeline from 10xGenomics into a file per singe cell.
@@ -28,12 +27,14 @@ public class BamFileSplitter {
 
     private static final String FILE_NAME_PREFIX = "cell_";
     private static final String EXTENSION = ".bam";
+    private static final int GROUP_SIZE = 50;
 
     private final Log logger = LogFactory.getLog(this.getClass());
     private final Path pathToBarcodeFile;
     private final String outputDir;
 
     private int fileCount;
+    private int groupCount;
     private int recordCount;
     private int absentBarcodeCount;
     private int invalidBarcodeCount;
@@ -52,7 +53,7 @@ public class BamFileSplitter {
         if (outputPath == null) outputDir = pathToBamFile.getParent() + "/output/";
         else outputDir = outputPath.toString();
 
-        File file = new File(outputDir);
+        File file = new File(outputDir + "/0/");
         if (!file.exists()) file.mkdirs();
 
         this.pathToBarcodeFile = pathToBarcodeFile;
@@ -136,24 +137,39 @@ public class BamFileSplitter {
     private void addRecordToBam(String barcode, SAMRecord samRecord) {
         SAMFileWriter outputBam = outputBams.get(barcode);
 
+        List<SAMReadGroupRecord> readGroup = outputBam.getFileHeader().getReadGroups();
+        if (readGroup.size() > 0) {
+            String readGroupId = readGroup.get(0).getId();
+            samRecord.setAttribute("RG", readGroupId);
+        }
+
         outputBam.addAlignment(samRecord);
     }
 
     private File createBamFile(String barcode) {
         fileCount++;
 
-        String filePath = outputDir + "/" + FILE_NAME_PREFIX + fileCount + "_" + barcode + EXTENSION;
+        if (fileCount % GROUP_SIZE == 0) {
+            groupCount++;
+            File file = new File(outputDir + "/" + groupCount);
+            if (!file.exists()) file.mkdirs();
+        }
+
+        String filePath = outputDir + "/" + groupCount  + "/" + FILE_NAME_PREFIX + fileCount + "_" + barcode + EXTENSION;
         return new File(filePath);
     }
 
     private SAMFileHeader createBamHeader(String barcode) {
         SAMFileHeader samHeader = samReader.getFileHeader();
 
-        SAMReadGroupRecord readGroup = new SAMReadGroupRecord(barcode);
-        readGroup.setSample("cell_" + fileCount);
-        readGroup.setPlatform("Chromium");
+        SAMReadGroupRecord readGroup = new SAMReadGroupRecord(String.valueOf(fileCount));
+        readGroup.setSample("cell_" + fileCount + "_" + barcode);
+        readGroup.setPlatform("ILLUMINA");
 
-        samHeader.addReadGroup(readGroup);
+        List<SAMReadGroupRecord> readGroups = new ArrayList<>();
+        readGroups.add(readGroup);
+
+        samHeader.setReadGroups(readGroups);
 
         return samHeader;
     }

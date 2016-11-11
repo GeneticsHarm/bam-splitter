@@ -62,7 +62,7 @@ public class Main {
 
                 if (outputPath == null) outputPath = Paths.get(System.getProperty("user.dir"));
 
-                sampleSheetCreator.createSamplesheet(outputPath);
+                sampleSheetCreator.create(outputPath);
             }
         }
         catch (ParseException exp) {
